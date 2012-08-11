@@ -1,0 +1,335 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>Caption</title>
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.7.1/jquery.min.js"></script>
+<script type="text/javascript" src="static/Queue.compressed.js"></script>
+<script type="text/javascript" src="static/jquery.easing.1.3.js"></script>
+<script type="text/javascript" src="static/jquery.color.js"></script>
+
+<script type="text/javascript">
+var BASE_URL_API = "http://caption.robhemsley.webfactional.com/API/v0/";
+var DEBUG = true;
+var DISPLAY_INTERVAL = 3000;
+
+var state = 0;
+var pause_display = false;
+var timer = null;
+var str_buffer = "";
+var display = new Queue();	
+var visible_obj = null;
+var screenWidth = 0;
+var screenHeight = 0;
+var word_height = 97;
+
+var colorOver = '#31b8da';
+var colorOut = '#1f1f1f';
+
+//Padding, mouseover
+var padLeft = '20px';
+var padRight = '20px';
+	
+//Default Padding
+var defpadLeft = $('#menu li a').css('paddingLeft');
+var defpadRight = $('#menu li a').css('paddingRight');
+
+/*
+ * procssSentence - Function
+ * Takes sentence string as input making Ajax call back to central server
+ * where it undergoes NLP returning a JSON string of display objects
+ *
+ * [{'img':'<img URL>', 'qwiki': '<qwiki url>', 'text':'<Sentence sent(Hack)>', ''}]
+ */
+function processSentence(text){
+	$.getJSON(BASE_URL_API+'processtxt?text='+encodeURIComponent(text), function(data) {		
+		for (var i = 0, len = data.length; i < len; i++) {
+			display.enqueue(data[i]);
+		}
+	});
+}
+
+String.prototype.capitalize = function(){
+   return this.replace( /(^|\s)([a-z])/g , function(m,p1,p2){ return p1+p2.toUpperCase(); } );
+};
+
+/*
+ * addBufferString - Function
+ * 
+ * Takes a buffer of text until a sentence has been made at which
+ * point the sentence is processed through the API and data returned.
+ */
+function addBufferString(text){
+	var s_index = text.indexOf('.');
+	if (s_index < 0){
+		s_index = text.indexOf('?');
+	}
+	if(s_index > -1){
+		str_buffer += text.substring(0, s_index+1);
+		processSentence(str_buffer);
+		if(s_index < (text.length-1)){
+			str_buffer = '';
+			addBufferString(text.substring(s_index+1, text.length));
+		}else{
+			str_buffer = '';
+		}
+	}else{
+		str_buffer += text;
+	}	
+}
+
+function displayScreen(){
+	if (pause_display == false){
+		if(display.isEmpty() == false){
+			setState(3);
+			var item = display.dequeue();
+			visible_obj = item;
+			
+			output = item.tag.capitalize();
+			if (output.length > 19){
+				output = output.substring(0,23) + "..";
+			}
+			
+			$("#menu").append('<li><a onClick="javascript:tagSelected(\''+item.qwiki+'\',\''+item.text+'\');">'+output+'</a></li>');
+			$('#menu').animate({top: '-='+word_height}, { queue:true, duration:500});
+		//	alert($("#menu li").css('height'));
+
+			setTimeout("moveMenu('"+item.img+"')", 500);
+
+		$('#menu li').mouseover(function (){
+			
+			//mouse over LI and look for A element for transition
+			$(this).find('a')
+			.animate( { paddingLeft: padLeft, paddingRight: padRight}, { queue:false, duration:100 } )
+			.animate( { backgroundColor: colorOver }, { queue:false, duration:200 });
+	
+		}).mouseout(function () {
+		
+			//mouse oout LI and look for A element and discard the mouse over transition
+			$(this).find('a')
+			.animate( { paddingLeft: defpadLeft, paddingRight: defpadRight}, { queue:false, duration:100 } )
+			.animate( { backgroundColor: colorOut }, { queue:false, duration:200 });
+		});	
+		
+
+		}
+	}
+}
+
+function moveMenu(url){
+	$('#test').attr("src", url);	
+}
+
+function resizeToMax(id){
+    myImage = new Image() 
+    var img = document.getElementById(id);
+    myImage.src = img.src; 
+    if(myImage.width / document.body.clientWidth > myImage.height / document.body.clientHeight){
+        img.style.width = "100%";
+    } else {
+        img.style.height = "100%";
+    }
+}
+
+function setup(){
+	if( typeof( window.innerWidth ) == 'number' ) {
+		//Non-IE
+		screenWidth = window.innerWidth;
+		screenHeight = window.innerHeight;
+	} else if( document.documentElement && ( document.documentElement.clientWidth || document.documentElement.clientHeight ) ) {
+		//IE 6+ in 'standards compliant mode'
+		screenWidth = document.documentElement.clientWidth;
+		screenHeight = document.documentElement.clientHeight;
+	} else if( document.body && ( document.body.clientWidth || document.body.clientHeight ) ) {
+		//IE 4 compatible
+		screenWidth = document.body.clientWidth;
+		screenHeight = document.body.clientHeight;
+	}
+	
+	$('#menu').animate({top: (word_height*7)}, { queue:false, duration:500});
+	$('#alert').css('top', ((screenHeight)/2)-30);
+	$('#alert').css('left', ((screenWidth)/2)-65);
+
+	setState(0);
+	timer = setInterval ('displayScreen()', DISPLAY_INTERVAL);
+	if(navigator.platform == "Linux armv7l"){
+			//setTimeout("debugDemo()", 2000);
+	}else{
+		setTimeout("debugDemo()", 2000);
+	}
+}
+
+function debugDemo(){
+	text = "David Cameron has said Britain will pay the price if it fails to improve security in Somalia. At a  summit in London, with representatives from more than 50  countries, the Prime Minister said Somalia was breeding terrorism that was threatening the security of the whole world. The United  Nations Secretary General, Ban Ki-moon, and the American Secretary of  State, Hillary Clinton, are among those attending.";
+	//text = "The race is on to voyage to the bottom of the sea. 50 years after man last visited the worlds deepest abyss, four teams are trying to reach the Mariana Trench, seven miles below the waves. One of  them, Triton Submarines, has been testing their deep diving sub in the Bahamas. Rebecca Morelle joined them."
+	//text = "How to  defuse the biggest timebomb in banking history, that is the challenge RBS bosses say they face."
+	//text = "A little bit of history was made  last night at the Olympic Aquatic Centre, when Tonia Couch and Sarah  Barrow became the first British women, ever to win an international  diving medal. Today, its the turn of 17-year-old Tom Daley, to go for  gold in the Olympic Pool. Our correspondent James Pearce is there.";
+	setState(2);
+	alert("Tablet Not Found - Running Demo Script");
+	alert("Analysis Text:\n"+text);
+	setTimeout("addBufferString('"+text+"')", 3000);
+}
+function setState(new_state){
+	switch(new_state){
+		case 0:
+			$('#alert').fadeOut(1000, function() {
+				$('#alert').html("<img src='static/loader.gif' style='margin: 0 auto;display:block;text-align:center;' /></br>Not Connected")
+				$('#alert').fadeIn(1000);
+    		});
+			break;
+			
+		case 1:
+			$('#alert').fadeOut(1000, function() {
+      			$('#alert').html("<img src='static/loader.gif' style='margin: 0 auto;display:block;text-align:center;' /></br>Connecting...")
+				$('#alert').fadeIn(1000);
+      		});
+			break;
+		case 2:
+			$('#alert').fadeOut(1000, function() {
+      			$('#alert').html("<img src='static/loader.gif' style='margin: 0 auto;display:block;text-align:center;' /></br>Listening...")
+				$('#alert').fadeIn(1000);
+      		});
+			break;
+		case 3:
+			$('#alert').fadeOut(1000);
+			break;
+		case 4:
+			$('#alert').fadeOut(1000, function() {
+      			$('#alert').html("<img src='static/loader.gif' style='margin: 0 auto;display:block;text-align:center;' /></br>Connection Lost!")
+				$('#alert').fadeIn(1000);
+				pause_display = true;
+				document.all.qwiki.src = "http://www.robhemsley.co.uk/blank.html"; 
+				$('#qwiki').fadeOut();
+      		});
+			break;
+	}
+}
+
+var offset = 0;
+function tagSelected(qwiki, sentence){
+	if (pause_display){
+		try{
+			window.loopback.resume();
+		}catch(err){}
+		$('#qwiki').fadeOut('fast', function() {
+			$('#sentence').fadeOut('slow');
+			$('#menu').animate({top: offset}, { queue:false, duration:500});
+
+			$('#background_img').fadeIn('fast', function(){
+				document.all.qwiki.src = "http://www.robhemsley.co.uk"; 
+				pause_display = false;
+			});
+		});
+	}else{
+		pause_display = true;
+		try{
+			window.loopback.pause();
+		}catch(err){}
+		offset = $('#menu').css('top');
+		$('#sentence').html(sentence);
+		
+		$('#background_img').fadeOut('fast', function(){
+			$('#sentence').fadeIn('slow');
+			$('#menu').animate({top: '-='+(word_height*6)}, { queue:true, duration:1000});
+			setTimeout("test('"+qwiki+"')", 2000);
+		});
+
+	}
+}
+
+function test(qwiki){
+	document.all.qwiki.src = qwiki;
+	$('#qwiki').show();
+}
+
+</script>
+
+<style type="text/css">
+	* {
+		-webkit-tap-highlight-color: rgba(0, 0, 0, 0);	
+	}
+
+	html, body{
+		margin: 0px;
+		font-family:helvetica, arial, verdana;
+	}
+	
+	.container img.wide {
+ 		width: 100%;
+	}
+	.container img.tall {
+ 		height: 100%;
+	}
+	
+	#test{
+		width: 100%
+	}
+	
+	#sidebar {
+		height:100%;
+		width:100%;
+		overflow:hidden;
+		position:a;
+	}	
+
+	#menu {
+		width:100%;
+		list-style:none;
+		padding:0;
+		margin:0;
+		top:0;
+		position:relative;
+		height:100%;
+		width:200px;
+	}
+	
+	#menu li {
+		padding:40px 0;
+		text-align:right;
+		display:block;
+		cursor:hand;
+		cursor:pointer;
+	}
+	
+	#menu li a {
+		background:url() repeat #1f1f1f;
+		
+		color:#ddd;
+		font-family:helvetica, arial, verdana;
+		font-size:15px;
+		font-weight:900;
+		display:inline;
+		padding:20px 13px 10px 20px;
+		text-decoration:none;
+	}
+	
+	#menu li span {
+		font-family:georgia, arial;
+		font-size:9px;
+		color:#464646;
+	}
+
+</style>
+
+</head>
+
+<body onload="setup()" background="static/bg_title.gif">
+
+<div id="background_img" class="container">
+	<img id="test"></img>
+</div>
+
+<div id="sentence" style='background:url() repeat #1f1f1f;position:absolute;top:20px;left:230px;color:#ddd;font-family:helvetica, arial, verdana;font-size:15px;font-weight:900;display:inline;padding:20px 13px 10px 20px;text-decoration:none;display: none;'></div>
+
+<div id="alert" style='background:url() repeat #1f1f1f;position:absolute;color:#ddd;font-family:helvetica, arial, verdana;font-size:9px;font-weight:900;display:inline;padding:10px 20px 10px 20px;text-decoration:none;display:none;width:130px;height:60px;text-align:center;'></div>
+<div id="sidebar" style='position:absolute;top:0px;left:0px;width:100%;height:100%;'>
+	<ul id="menu">
+	</ul>
+</div>
+
+
+<iframe name='qwiki' id='qwiki' style='-webkit-tap-highlight-color: rgba(0, 0, 0, 0);position:absolute;top:100px;left:0px;width:100%;height:500px; z-index:9999;display:none;' frameborder='yes' src="http://www.robhemsley.co.uk"></iframe>
+
+</body>
+</html>
